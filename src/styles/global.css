@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@layer components{
+    .select-filter{
+        @apply  px-3 py-2 bg-white text-gray-400 rounded-md outline-2 focus:outline-emerald-300;
+    }
+
+    .filters-container{
+        @apply flex-wrap flex gap-4 justify-center items-center mt-5;
+
+        label{
+             @apply text-sm text-gray-500;
+        }
+    }
+
+    .image-box{
+        @apply block w-full mb-5 overflow-hidden rounded-xl break-inside-avoid;
+
+        img{
+            @apply w-full;
+        }
+    }
+
+    .image-massonry-container{
+        @apply columns-1 sm:columns-2 lg:columns-3 gap-x-5 mt-8;
+    }
+}

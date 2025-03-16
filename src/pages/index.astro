@@ -6,6 +6,193 @@ import Layout from '../layouts/Layout.astro';
 // Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
 ---
 
-<Layout>
-	<Welcome />
+<Layout title={'Welcome to Pixy Gallery'}>
+	<div class="text-center space-y-5">
+		<h1 class="text-3xl md:text-5xl font-extrabold">Welcome To <strong class="text-emerald-400">Pixi Gallery</strong></h1>
+		<p class="text-lg text-gray-500">Search your wished image with these filters</p>
+	</div>
+	<div class="mt-5 w-full">
+		<input id="search-bar" type="text" class="w-full max-w-md mx-auto block bg-white shadow-sm px-4 py-2 rounded-md placeholder:text-gray-300 focus:outline-emerald-500" placeholder="Search Whatever you want, ejm: car, tree, etc.">
+		<div class="filters-container hidden">
+			<div class="flex flex-col gap-1.5">
+				<label for="orientation">Orientation</label>
+				<select name="orientation" id="orientation" class="select-filter">
+					<option value="all" selected>Todos</option>
+					<option value="horizontal">Horizontal</option>
+					<option value="vertical">Vertical</option>
+				</select>
+			</div>
+			<div class="flex flex-col gap-1.5">
+				<label for="type">Tipo de imagen</label>
+				<select name="type" id="type_image" class="select-filter">
+					<option value="all" selected>Todos</option>
+					<option value="photo">Photo</option>
+					<option value="photo">Illustration</option>
+					<option value="vector">Vector</option>
+				</select>
+			</div>
+			<div class="flex flex-col gap-1.5">
+				<label for="order">Ordenar por</label>
+				<select name="order" id="type_image" class="select-filter">
+					<option value="popular" selected>Popular</option>
+					<option value="latest">Latest</option>
+				</select>
+			</div>
+		</div>
+	</div>
+	<section id="gallery">
+		<div class="image-massonry-container" id="gallery-container"></div>
+		<div id="sentinel"></div>
+	</section>
+
+	<script type="text/javascript">
+
+
+
+		const gallery = document.querySelector('#gallery')
+		const filtersContainer = document.querySelector('.filters-container')
+		const galleryResults = document.querySelector('#gallery-container');
+		const searchBar = document.querySelector('#search-bar')
+		const sentinel = document.querySelector('#sentinel')
+
+		const API_KEY = '49341407-22f2ff3fa6c1821acd85231ef'
+		const API_URL = 'https://pixabay.com/api/';
+		const perPage = 40;
+		let isLoading = false;
+		let currentPage = 0;
+		const imageFilters = {
+			textSearch: null,
+			type: 'all',
+			orientation: 'all',
+			order: 'popular'
+		} 
+		const intersectionOptions = {
+			rootMargin: '200px',
+		}
+
+		function onIntersecting([entry]){
+			if(entry.isIntersecting){
+				currentPage++;
+				getSetImages(imageFilters.textSearch);
+			}
+		}
+
+		// eventos
+		filtersContainer.addEventListener('change' , e => {
+			if(e.target.tagName === 'SELECT'){
+				const filterValue = e.target.value
+				const filterName = e.target.name
+				imageFilters[filterName] = filterValue
+				currentPage = 1;
+				getSetImages(imageFilters.textSearch)
+			}
+		})
+
+		searchBar.addEventListener('input', e=> {
+			let inputWord = e.target.value;
+			if(inputWord.includes(" ") && inputWord.length > 0){
+				inputWord = inputWord.replace(" ", "+")
+			}
+
+			if(inputWord.length >= 0 && inputWord.length < 3){
+				if(document.getElementById("message")) return
+				let message = "Escribe más de 2 letras para realizar una búsqueda"
+				imageFilters.textSearch = '';
+				imageFilters.orientation = 'all';
+				imageFilters.type = 'all';
+				imageFilters.order = 'all';
+				renderMessage(message)
+				return
+			}
+
+			imageFilters.textSearch = inputWord
+			document.getElementById("message")?.remove()
+			getSetImages(imageFilters.textSearch)
+		})
+
+		// setup intersection Observer
+		const loadMoreObserver = new IntersectionObserver(onIntersecting, intersectionOptions)
+		loadMoreObserver.observe(sentinel)
+
+		async function getRandomWord(){
+			try{
+				const response = await fetch('https://random-word-api.herokuapp.com/word?length=8');
+				const data = await response.json()
+				return data[0];
+			}catch(error){
+				console.log(error)
+			}
+		}
+
+		async function getSetImages(textSearch = null){
+			isLoading = true
+			let currentSearch = textSearch ?? await getRandomWord()
+			console.log(imageFilters)
+			try{
+				const loadMoreItems = currentPage >= 1;
+				const response = await fetch(`${API_URL}?key=${API_KEY}&q=${currentSearch}&orientation=${imageFilters.orientation}&image_type=${imageFilters.type}&order=${imageFilters.order}&per_page=${perPage}&page=${currentPage}`)
+				const data = await response.json()
+				console.log(data)
+				console.log(data.hits)
+				renderImages(data.hits , loadMoreItems)
+			}catch(error){
+				console.log(error)
+			}finally{
+				isLoading = false
+			}
+		}
+
+		function renderImages(images, loadMoreItems){
+			console.log(currentPage)
+			if(images.length === 0 && currentPage === 1){
+				filtersContainer.classList.add('hidden')
+				renderMessage("No hay resultados Disponibles");
+				return
+			}
+			if(images.length === 0 && loadMoreItems && imageFilters.textSearch === undefined){
+				const endResults = document.createElement('DIV');
+				endResults.textContent = "Fin de los resultados"
+				endResults.classList.add('text-emerald-500', 'text-center')
+				gallery.appendChild(endResults)
+				loadMoreObserver.unobserve(sentinel)
+				return
+			}
+
+			filtersContainer.classList.remove('hidden')
+			const changedFilter = Object.values(imageFilters).some(filter => filter !== 'all');
+			console.log(changedFilter)
+			console.log('loadmoreitems' + loadMoreItems)
+			if (changedFilter && !loadMoreItems) {
+				console.log('borrando renderizado anterior')
+				galleryResults.innerHTML = ""
+				return
+			}
+
+			images.forEach(image => {
+				const imageBox = document.createElement('A');
+				imageBox.classList.add('image-box')
+				imageBox.setAttribute("data-id", image.id);
+				imageBox.href = `/images/${image.id}`
+				const img = document.createElement('IMG')
+				img.setAttribute("src", image.previewURL);
+				img.setAttribute("alt", image.user);
+				img.setAttribute("data-src", image.webformatURL);
+
+				imageBox?.appendChild(img)
+				galleryResults?.appendChild(imageBox)
+			});
+		}
+
+		function renderMessage(content){
+			filtersContainer.classList.add('hidden')
+			galleryResults.innerHTML = "";
+			const message = document.createElement('P');
+			message.id = "message"
+			message.textContent = content
+			message.classList.add('text-center', 'text-emerald-600')
+			gallery.appendChild(message)
+		}
+
+		// getSetImages()
+	</script>
 </Layout>
