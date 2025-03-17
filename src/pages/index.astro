@@ -27,7 +27,7 @@ import Layout from '../layouts/Layout.astro';
 				<select name="type" id="type_image" class="select-filter">
 					<option value="all" selected>Todos</option>
 					<option value="photo">Photo</option>
-					<option value="photo">Illustration</option>
+					<option value="illustration">Illustration</option>
 					<option value="vector">Vector</option>
 				</select>
 			</div>
@@ -42,22 +42,24 @@ import Layout from '../layouts/Layout.astro';
 	</div>
 	<section id="gallery">
 		<div class="image-massonry-container" id="gallery-container"></div>
-		<div id="sentinel"></div>
+		<div id="sentinel" class="h-20 flex items-center justify-center">
+			<div class="loading-spinner hidden"></div>
+		</div>
+		<div id="end-message" class="hidden text-center text-emerald-500 text-lg mt-6 py-5">
+			<p>Has llegado al final de lo resultados.</p>
+		</div>
 	</section>
-
-	<script type="text/javascript">
-
-
-
+	<script is:inline type="module">
 		const gallery = document.querySelector('#gallery')
 		const filtersContainer = document.querySelector('.filters-container')
 		const galleryResults = document.querySelector('#gallery-container');
 		const searchBar = document.querySelector('#search-bar')
 		const sentinel = document.querySelector('#sentinel')
+		const endMessage = document.querySelector('#end-message')
 
 		const API_KEY = '49341407-22f2ff3fa6c1821acd85231ef'
 		const API_URL = 'https://pixabay.com/api/';
-		const perPage = 40;
+		const perPage = 20;
 		let isLoading = false;
 		let currentPage = 0;
 		const imageFilters = {
@@ -65,54 +67,80 @@ import Layout from '../layouts/Layout.astro';
 			type: 'all',
 			orientation: 'all',
 			order: 'popular'
-		} 
-		const intersectionOptions = {
-			rootMargin: '200px',
 		}
 
-		function onIntersecting([entry]){
-			if(entry.isIntersecting){
-				currentPage++;
-				getSetImages(imageFilters.textSearch);
+		// debounce and throtle
+		function debounce(func, timeout = 500) {
+			let timer;
+			return (...args) => {
+				clearTimeout(timer);
+				timer = setTimeout(() => { func.apply(this, args); }, timeout);
+			};
+		}
+
+		function throttle(func, limit = 500) {
+			let lastFunc;
+			let lastRan;
+			return function() {
+				const context = this;
+				const args = arguments;
+				if (!lastRan) {
+					func.apply(context, args);
+					lastRan = Date.now();
+				} else {
+					clearTimeout(lastFunc);
+					lastFunc = setTimeout(function() {
+						if ((Date.now() - lastRan) >= limit) {
+							func.apply(context, args);
+							lastRan = Date.now();
+						}
+					}, limit - (Date.now() - lastRan));
+				}
 			}
 		}
 
-		// eventos
+		// dom events
 		filtersContainer.addEventListener('change' , e => {
 			if(e.target.tagName === 'SELECT'){
 				const filterValue = e.target.value
 				const filterName = e.target.name
 				imageFilters[filterName] = filterValue
-				currentPage = 1;
-				getSetImages(imageFilters.textSearch)
+				getSetImages(imageFilters.textSearch, true)
 			}
 		})
 
-		searchBar.addEventListener('input', e=> {
-			let inputWord = e.target.value;
-			if(inputWord.includes(" ") && inputWord.length > 0){
-				inputWord = inputWord.replace(" ", "+")
-			}
-
-			if(inputWord.length >= 0 && inputWord.length < 3){
-				if(document.getElementById("message")) return
-				let message = "Escribe más de 2 letras para realizar una búsqueda"
-				imageFilters.textSearch = '';
-				imageFilters.orientation = 'all';
-				imageFilters.type = 'all';
-				imageFilters.order = 'all';
-				renderMessage(message)
-				return
-			}
-
-			imageFilters.textSearch = inputWord
-			document.getElementById("message")?.remove()
-			getSetImages(imageFilters.textSearch)
-		})
+		searchBar.addEventListener('input', debounce(e => searchResults(e)))
 
 		// setup intersection Observer
-		const loadMoreObserver = new IntersectionObserver(onIntersecting, intersectionOptions)
+
+		const intersectionOptions = {
+			rootMargin: '200px',
+		}
+
+		const intersectImagesOptions = {
+			rootMargin: '40px',
+			threshold: 0.5
+		}
+		
+		function onIntersectingSentinel([entry]){
+			if(entry.isIntersecting && imageFilters.textSearch !== ''){
+				currentPage++;
+				getSetImages(imageFilters.textSearch);
+			}
+		}
+
+		function onIntersectingImages(entries, self){
+			entries.forEach(entry => {
+				entry.target.src = entry.target.getAttribute('data-src');
+				self.unobserve(entry.target)
+			})
+		}
+
+		const loadMoreObserver = new IntersectionObserver(throttle(onIntersectingSentinel), intersectionOptions)
 		loadMoreObserver.observe(sentinel)
+		const lazyImagesObverser = new IntersectionObserver(onIntersectingImages, intersectImagesOptions)
+
+		// get data from apis
 
 		async function getRandomWord(){
 			try{
@@ -124,63 +152,104 @@ import Layout from '../layouts/Layout.astro';
 			}
 		}
 
-		async function getSetImages(textSearch = null){
+		async function getSetImages(textSearch = null, changedFilter = false){
+			if(isLoading) return
 			isLoading = true
+			sentinel.querySelector('.loading-spinner').classList.remove('hidden')
 			let currentSearch = textSearch ?? await getRandomWord()
-			console.log(imageFilters)
+			endMessage.classList.add('hidden')
+			loadMoreObserver.observe(sentinel)
 			try{
-				const loadMoreItems = currentPage >= 1;
+				if(changedFilter){
+					currentPage = 1;
+					galleryResults.innerHTML = "";
+				}
 				const response = await fetch(`${API_URL}?key=${API_KEY}&q=${currentSearch}&orientation=${imageFilters.orientation}&image_type=${imageFilters.type}&order=${imageFilters.order}&per_page=${perPage}&page=${currentPage}`)
 				const data = await response.json()
-				console.log(data)
-				console.log(data.hits)
-				renderImages(data.hits , loadMoreItems)
+				console.log(`tamaño resultados ${data.hits.length}`)
+				if(data.hits.length === 0 && currentPage === 1){
+					renderMessage("No hay resultados disponibles");
+					return
+				}
+
+				if(data.hits.length === 0 && currentPage >= 1){
+					endMessage.classList.remove('hidden')
+					loadMoreObserver.unobserve(sentinel)
+					return
+				}
+				renderImages(data.hits , !changedFilter)
 			}catch(error){
 				console.log(error)
+				renderMessage("Error al cargar las imágenes")
 			}finally{
 				isLoading = false
+				sentinel.querySelector('.loading-spinner').classList.add('hidden')
 			}
 		}
 
-		function renderImages(images, loadMoreItems){
-			console.log(currentPage)
-			if(images.length === 0 && currentPage === 1){
+		// dinamic functions 
+		function searchResults(e){
+			let inputWord = e.target.value.trim();
+			if(inputWord.includes(" ") && inputWord.length > 0){
+				inputWord = inputWord.replace(" ", "+")
+			}
+
+			if(inputWord.length >= 0 && inputWord.length < 3){
+				if(document.getElementById("message")) return
 				filtersContainer.classList.add('hidden')
-				renderMessage("No hay resultados Disponibles");
+				endMessage.classList.add('hidden')
+				
+				let message = "Escribe más de 2 letras para realizar una búsqueda"
+				imageFilters.textSearch = '';
+				imageFilters.orientation = 'all';
+				imageFilters.type = 'all';
+				imageFilters.order = 'all';
+				renderMessage(message)
 				return
 			}
-			if(images.length === 0 && loadMoreItems && imageFilters.textSearch === undefined){
-				const endResults = document.createElement('DIV');
-				endResults.textContent = "Fin de los resultados"
-				endResults.classList.add('text-emerald-500', 'text-center')
-				gallery.appendChild(endResults)
-				loadMoreObserver.unobserve(sentinel)
-				return
-			}
+
+			imageFilters.textSearch = inputWord
+			document.getElementById("message")?.remove()
+			getSetImages(imageFilters.textSearch, true)
+		}
+
+		function renderImages(images, loadMoreItems = true){
+			if(!loadMoreItems) galleryResults.innerHTML = ""
+			
+			const fragment = document.createDocumentFragment();
 
 			filtersContainer.classList.remove('hidden')
-			const changedFilter = Object.values(imageFilters).some(filter => filter !== 'all');
-			console.log(changedFilter)
-			console.log('loadmoreitems' + loadMoreItems)
-			if (changedFilter && !loadMoreItems) {
-				console.log('borrando renderizado anterior')
-				galleryResults.innerHTML = ""
-				return
-			}
-
+	
 			images.forEach(image => {
 				const imageBox = document.createElement('A');
-				imageBox.classList.add('image-box')
+				imageBox.classList.add('image-box', 'group')
 				imageBox.setAttribute("data-id", image.id);
 				imageBox.href = `/images/${image.id}`
 				const img = document.createElement('IMG')
 				img.setAttribute("src", image.previewURL);
-				img.setAttribute("alt", image.user);
+				img.alt = `${image.tags || 'Imagen'} - ${image.user}`;
+				img.decoding = "async";
+				img.loading = "lazy";
 				img.setAttribute("data-src", image.webformatURL);
 
-				imageBox?.appendChild(img)
-				galleryResults?.appendChild(imageBox)
+				const overlay = document.createElement('DIV');
+				overlay.classList.add('overlay')
+				const info = document.createElement('DIV');
+				info.innerHTML = `
+				<p class="text-white text-sm font-medium">${image.user}</p>
+				<div class="flex items-center gap-2 mt-2">
+					<span class="text-white text-sm">${image.likes} ♥</span>
+					<span class="text-white text-sm">${image.downloads} ↓</span>
+				</div>
+				`;
+
+				overlay.appendChild(info)
+				imageBox?.append(img, overlay)
+				fragment?.appendChild(imageBox)
+				lazyImagesObverser.observe(img)
 			});
+
+			galleryResults.appendChild(fragment)
 		}
 
 		function renderMessage(content){
@@ -190,9 +259,37 @@ import Layout from '../layouts/Layout.astro';
 			message.id = "message"
 			message.textContent = content
 			message.classList.add('text-center', 'text-emerald-600')
-			gallery.appendChild(message)
+			gallery.insertBefore(message, sentinel)
 		}
 
-		// getSetImages()
+		
 	</script>
 </Layout>
+
+<style>
+	.loading-spinner {
+		border: 4px solid #f3f3f3;
+		border-top: 4px solid #10b981;
+		border-radius: 50%;
+		width: 40px;
+		height: 40px;
+		animation: spin 1s linear infinite;
+		margin: 2rem auto;
+	}
+
+	@keyframes spin {
+		0% { transform: rotate(0deg); }
+		100% { transform: rotate(360deg); }
+	}
+
+	.end-message {
+		padding: 2rem;
+		text-align: center;
+		font-size: 1.2rem;
+		color: #6b7280;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+	}
+</style>

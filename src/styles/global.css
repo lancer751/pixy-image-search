@@ -14,10 +14,13 @@
     }
 
     .image-box{
-        @apply block w-full mb-5 overflow-hidden rounded-xl break-inside-avoid;
+        @apply relative block w-full mb-5 overflow-hidden rounded-xl break-inside-avoid shadow-lg hover:shadow-xl transition-shadow;
 
         img{
-            @apply w-full;
+            @apply w-full object-cover h-full transform group-hover:scale-105 transition-transform duration-300;
+        }
+        .overlay{
+            @apply absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-opacity p-4 flex items-end;
         }
     }
 
