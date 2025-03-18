@@ -2,20 +2,18 @@
 import Welcome from '../components/Welcome.astro';
 import Layout from '../layouts/Layout.astro';
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
 ---
 
 <Layout title={'Welcome to Pixy Gallery'}>
 	<div class="text-center space-y-5">
-		<h1 class="text-3xl md:text-5xl font-extrabold">Welcome To <strong class="text-emerald-400">Pixi Gallery</strong></h1>
-		<p class="text-lg text-gray-500">Search your wished image with these filters</p>
+		<h1 class="text-3xl md:text-5xl font-extrabold">Bienvenido a <strong class="text-emerald-400">Pixi Gallery</strong></h1>
+		<p class="text-lg text-gray-500">Encuentra la imagen que deseas con la api de <strong class="text-black">PIXABAY</strong></p>
 	</div>
 	<div class="mt-5 w-full">
-		<input id="search-bar" type="text" class="w-full max-w-md mx-auto block bg-white shadow-sm px-4 py-2 rounded-md placeholder:text-gray-300 focus:outline-emerald-500" placeholder="Search Whatever you want, ejm: car, tree, etc.">
+		<input id="search-bar" type="text" class="w-full max-w-md mx-auto block bg-white shadow-sm px-4 py-2 rounded-md placeholder:text-gray-300 focus:outline-emerald-500" placeholder="Busca lo que quieras, ejm: auto, árbol, etc.">
 		<div class="filters-container hidden">
 			<div class="flex flex-col gap-1.5">
-				<label for="orientation">Orientation</label>
+				<label for="orientation">Orientación</label>
 				<select name="orientation" id="orientation" class="select-filter">
 					<option value="all" selected>Todos</option>
 					<option value="horizontal">Horizontal</option>
@@ -26,8 +24,8 @@ import Layout from '../layouts/Layout.astro';
 				<label for="type">Tipo de imagen</label>
 				<select name="type" id="type_image" class="select-filter">
 					<option value="all" selected>Todos</option>
-					<option value="photo">Photo</option>
-					<option value="illustration">Illustration</option>
+					<option value="photo">Foto</option>
+					<option value="illustration">Ilustración</option>
 					<option value="vector">Vector</option>
 				</select>
 			</div>
@@ -35,14 +33,14 @@ import Layout from '../layouts/Layout.astro';
 				<label for="order">Ordenar por</label>
 				<select name="order" id="type_image" class="select-filter">
 					<option value="popular" selected>Popular</option>
-					<option value="latest">Latest</option>
+					<option value="latest">Más reciente</option>
 				</select>
 			</div>
 		</div>
 	</div>
 	<section id="gallery">
 		<div class="image-massonry-container" id="gallery-container"></div>
-		<div id="sentinel" class="h-20 flex items-center justify-center">
+		<div id="sentinel" class="w-full h-20 flex items-center justify-center">
 			<div class="loading-spinner hidden"></div>
 		</div>
 		<div id="end-message" class="hidden text-center text-emerald-500 text-lg mt-6 py-5">
@@ -59,11 +57,11 @@ import Layout from '../layouts/Layout.astro';
 
 		const API_KEY = '49341407-22f2ff3fa6c1821acd85231ef'
 		const API_URL = 'https://pixabay.com/api/';
-		const perPage = 20;
+		const perPage = 40;
 		let isLoading = false;
-		let currentPage = 0;
+		let currentPage = 1;
 		const imageFilters = {
-			textSearch: null,
+			textSearch: '',
 			type: 'all',
 			orientation: 'all',
 			order: 'popular'
@@ -142,21 +140,10 @@ import Layout from '../layouts/Layout.astro';
 
 		// get data from apis
 
-		async function getRandomWord(){
-			try{
-				const response = await fetch('https://random-word-api.herokuapp.com/word?length=8');
-				const data = await response.json()
-				return data[0];
-			}catch(error){
-				console.log(error)
-			}
-		}
-
-		async function getSetImages(textSearch = null, changedFilter = false){
+		async function getSetImages(textSearch = '', changedFilter = false){
 			if(isLoading) return
 			isLoading = true
 			sentinel.querySelector('.loading-spinner').classList.remove('hidden')
-			let currentSearch = textSearch ?? await getRandomWord()
 			endMessage.classList.add('hidden')
 			loadMoreObserver.observe(sentinel)
 			try{
@@ -164,7 +151,7 @@ import Layout from '../layouts/Layout.astro';
 					currentPage = 1;
 					galleryResults.innerHTML = "";
 				}
-				const response = await fetch(`${API_URL}?key=${API_KEY}&q=${currentSearch}&orientation=${imageFilters.orientation}&image_type=${imageFilters.type}&order=${imageFilters.order}&per_page=${perPage}&page=${currentPage}`)
+				const response = await fetch(`${API_URL}?key=${API_KEY}&q=${textSearch}&orientation=${imageFilters.orientation}&image_type=${imageFilters.type}&order=${imageFilters.order}&per_page=${perPage}&page=${currentPage}&lang=es`)
 				const data = await response.json()
 				console.log(`tamaño resultados ${data.hits.length}`)
 				if(data.hits.length === 0 && currentPage === 1){
@@ -224,7 +211,8 @@ import Layout from '../layouts/Layout.astro';
 				const imageBox = document.createElement('A');
 				imageBox.classList.add('image-box', 'group')
 				imageBox.setAttribute("data-id", image.id);
-				imageBox.href = `/images/${image.id}`
+				imageBox.href = image.pageURL
+				imageBox.target = '_blank'
 				const img = document.createElement('IMG')
 				img.setAttribute("src", image.previewURL);
 				img.alt = `${image.tags || 'Imagen'} - ${image.user}`;
@@ -261,8 +249,8 @@ import Layout from '../layouts/Layout.astro';
 			message.classList.add('text-center', 'text-emerald-600')
 			gallery.insertBefore(message, sentinel)
 		}
-
 		
+		getSetImages()
 	</script>
 </Layout>
 
